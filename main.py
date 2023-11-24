@@ -1,5 +1,5 @@
 from discord.ext import commands
-TOKEN = "MTE3NzcxMTc1MjczNDA2NDY1MA.GN1Q8G.GTYxxwYqVM0pe0p0tUn9_LBp-N445jD3eb8lxk"
+TOKEN = "bot token"
 
 # Initialize Bot and Denote The Command Prefix
 bot = commands.Bot(command_prefix="/")
