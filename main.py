@@ -1,23 +1,3 @@
-import discord
-import random   
-from discord.ext import commands
-import praw
-from urlextract import URLExtract
-
-check_for_async=False
-extractor = URLExtract()
-
-#BOT TOKEN, DO NOT SHARE
-TOKEN = "bot token"
-
-#schniippppp reddit account info, DO NOT SHARE
-reddit = asyncpraw.Reddit(
-    client_id="bla",
-    client_secret="bla",
-    password = "bla",
-    user_agent="bla",
-    username = "bla",
-)
 
 #creates command prefix, idk what the intents does
 intents = discord.Intents.all()
@@ -68,35 +48,37 @@ async def test(ctx, arg):
 '''
 shit that needs to be fixed rn:
     - add command that can toggle nsfw subreddits and confirm with user that they are over 18
-    - getpost doesnt work when the post just contains a link. also some formatting issues for the text.
     - add time and server to reports
     - handle post too long
-    - GET NEXT TO WORK (PRIORITY) then make previous function
-    - fix link and getpost and numarr[] (check line 125) cuz of new get module
+    - make previous function
+    - make getpost still send any linked media even if post has no text
+    - WHY IS EVERYTHING SENDING TWICE? (PRIORITY)
     - see if there is ANY faster way to get check if its gallery
+    - add "my command prefix is schnip" to help function
 '''
 
-#array for link function
-numarr = []
-
-#array for current posts that are being sent
-postsusing = []
-
-#1000 posts from get function
+#to store total posts retrieved for a subreddit
 array = []
 
-#used in next function, will replace probably
+#for getnext an getprev functions
 cat = ""
 subs = ""
+
+#for link function
+lastusednum = 0
 
 #lists ten posts of a category from a subreddit
 @bot.command()
 #ctx refers to Commands.context object, idk what that does but it has to be there
 async def get(ctx, sub, category, num):
+    global array
+    global cat
+    global subs
+    global lastusednum
+
+    lastusednum = int(num)
     cat = category
-    print(cat)
     subs = sub
-    print(subs)
 
     print(str(ctx.author) + " getted " + str(category) + " for " + str(sub))
     
@@ -108,26 +90,24 @@ async def get(ctx, sub, category, num):
     subreddit = reddit.subreddit(sub)
 
     if category == "hot":
-        subbo = subreddit.hot(limit=1000)
+        subbo = subreddit.hot(limit=int(num))
     elif category == "new":
-        subbo = subreddit.new(limit=1000)
+        subbo = subreddit.new(limit=int(num))
     elif category == "top":
-        subbo = subreddit.top(limit=1000)
+        subbo = subreddit.top(limit=int(num))
     elif category == "rising":
-        subbo = subreddit.rising(limit=1000)
+        subbo = subreddit.rising(limit=int(num))
     elif category == "controversial":
-        subbo = subreddit.controversial(limit=1000)
+        subbo = subreddit.controversial(limit=int(num))
     else:
         await ctx.send("The only valid categories are: hot, new, top, rising or controversial.")
 
     for submission in subbo:
         array.append(submission)
-        numarr.append(submission)
 
     x = 0
     for i in array:
         x = x+1
-        
         #gets reddit hosted image
         if i.url.endswith(('.jpg', '.png', '.gif')):
             try:
@@ -181,38 +161,168 @@ async def get(ctx, sub, category, num):
 
         if x == int(num):
                 print("Schnipper successfully executed get " + str(category) + " for " + str(sub))
-                #temparr = array[int(num):]
-                #array = temparr
 
 
-#for next function, same thing as get function
-#but uses postusing[] instead of array[]
-#because array[] is 1000 elements long
-#and postusing[] is probably not 1000 elements long
-async def nextget(ctx):
-    x=0
-    for i in postsusing:
-            x = x+1
-            
+#basically the same as get
+#except it gets the next designated number of posts after user has used get
+@bot.command()
+async def getnext(ctx, num):
+    global array
+    global cat
+    global subs
+    global lastusednum
+    
+    lastusednum = int(num)
+
+    number = len(array)
+
+    array = []
+
+    #gets up to previous length + new designated length
+    nummo = number+int(num)
+
+    #array for all links in a post
+    urlsarr = []
+
+    subreddit = reddit.subreddit(subs)
+
+    if cat == "hot":
+        subbo = subreddit.hot(limit=int(nummo))
+    elif cat == "new":
+        subbo = subreddit.new(limit=int(nummo))
+    elif cat == "top":
+        subbo = subreddit.top(limit=int(nummo))
+    elif cat == "rising":
+        subbo = subreddit.rising(limit=int(nummo))
+    elif cat == "controversial":
+        subbo = subreddit.controversial(limit=int(nummo))
+    else:
+        await ctx.send("The only valid categories are: hot, new, top, rising, or controversial.")
+
+    for submission in subbo:
+        array.append(submission)
+
+    #split it so it has only the new posts
+    newarr = array[number:nummo]
+
+    x = 0
+    for i in newarr:
+        x += 1
+        
+        # gets reddit hosted image
+        if i.url.endswith(('.jpg', '.png', '.gif')):
+            try:
+                if int(num) > 0:
+                    await ctx.send(f"**{x}. {i.title}** {i.url}")
+                    num = int(num) - 1
+            except Exception as e:
+                await ctx.send(f'Uh oh! Error: {e}')
+                print(e)
+
+        # gets reddit hosted video
+        elif i.is_video:
+            video_url = i.media['reddit_video']['fallback_url']
+            try:
+                if int(num) > 0:
+                    await ctx.send(f"**{x}. {i.title}** {video_url}")
+                    num = int(num) - 1
+            except Exception as e:
+                await ctx.send(f'Uh oh! Error: {e}')
+                print(e)
+
+        # gets all images in a gallery
+        elif hasattr(i, "is_gallery"):
+            # idk how this part works but it does
+            ids = [j['media_id'] for j in i.gallery_data['items']]
+            url_data = [(i.media_metadata[id]['p'][0]['u'].split("?")[0].replace("preview", "i")) for id in ids]
+            galleryarr = " ".join(url_data)
+            try:
+                if int(num) > 0:
+                    await ctx.send(f"**{x}. {i.title}** {galleryarr}")
+                    num = int(num) - 1
+            except Exception as e:
+                await ctx.send(f'Uh oh! Error: {e}')
+                print(e)
+
+        # gets all non-reddit hosted media and websites in post
+        else:
+            text = i.selftext
+            urls = extractor.find_urls(text)
+            for url in urls:
+                if url.startswith("https"):
+                    urlsarr.append(url)
+            try:
+                if int(num) > 0:
+                    await ctx.send(f"**{x}. {i.title}** {' '.join(urlsarr)}")
+                    num = int(num) - 1
+                    urlsarr = []
+            except Exception as e:
+                await ctx.send(f'Uh oh! Error: {e}')
+                print(e)
+
+    if x == int(num):
+        print("Schnipper successfully executed get")
+
+#links to a post after using get or next or prev
+@bot.command()
+async def link(ctx, num):
+    global lastusednum
+    #only has posts from the last function call
+    newlist = []
+    n = len(array) - int(lastusednum)
+    if (len(array) > int(lastusednum)):
+        newlist = array[n:]
+    else:
+        newlist = array
+    print(str(ctx.author) + " used link for " + str(newlist[int(num)-1].title))
+    try:
+        await ctx.send("https://www.reddit.com/" + newlist[int(num)-1].id)
+        print("Schnipper successfully executed link for " + str(newlist[int(num)-1].title))
+    except requests.Timeout as e:
+        print("Schnipper timed out")
+
+#sends body text of a post after using get or next or prev
+#basically exact same as link function + get function
+@bot.command()
+async def getpost(ctx, num):
+    global lastusednum
+    newlist = []
+    n = len(array) - int(lastusednum)
+    if (len(array) > int(lastusednum)):
+        newlist = array[n:]
+    else:
+        newlist = array
+    print(str(ctx.author) + " used getpost for " + str(newlist[int(num)-1].title))
+    text = newlist[int(num)-1].selftext
+    title = str(newlist[int(num)-1].title)
+    author = str(newlist[int(num)-1].author)
+    try:
+        if len(text) == 0:
+            await ctx.send("**" + title + "** posted by **" + author + "** has no body text.")
+            print("Post has no body text.")
+        else:
+            i = newlist[int(num)-1]
             if i.url.endswith(('.jpg', '.png', '.gif')):
                 try:
                     if int(num) > 0:
-                        await ctx.send("**" + str(x ) + ". " + i.title + "** " + i.url)
-                        num = int(num)-1
+                            await ctx.send("**" + title + "** posted by **" + author + ":** ```" + text + "```" +  i.url)
+                            num = int(num)-1
                 except Exception as e:
                     await ctx.send(f'Uh oh! Error: ' + e.args[0])
                     print(e.args[0])
 
+            #gets reddit hosted video
             elif i.is_video:
                 video_url = i.media['reddit_video']['fallback_url']
                 try:
                     if int(num) > 0:
-                        await ctx.send("**" + str(x) + ". " + i.title + "** " + video_url )
+                        await ctx.send("**" + title + "** posted by **" + author + ":** ```" + text + "```" + video_url )
                         num = int(num) -1
                 except Exception as e:
                     await ctx.send(f'Uh oh! Error: ' + e.args[0])
                     print(e.args[0])
 
+            #gets all images in a gallery
             elif hasattr(i, "is_gallery"):
                 #idk how this part works but it does
                 ids = [j['media_id'] for j in i.gallery_data['items']]
@@ -220,12 +330,13 @@ async def nextget(ctx):
                 galleryarr = " ".join(url_data)
                 try:
                     if int(num) > 0:
-                        await ctx.send(f"**{x}. {i.title}** {galleryarr}")
+                        await ctx.send("**" + title + "** posted by **" + author + ":** ```" + text + "```" +  f"{galleryarr}")
                         num = int(num)-1
                 except Exception as e:
                     await ctx.send(f'Uh oh! Error: ' + e.args[0])
                     print(e.args[0])
 
+            #gets all non reddit hosted media and websites in post
             else:
                 text = i.selftext
                 urls = extractor.find_urls(text)
@@ -240,45 +351,7 @@ async def nextget(ctx):
                 except Exception as e:
                     await ctx.send(f'Uh oh! Error: ' + e.args[0])
                     print(e.args[0])
-            if x == int(num):
-                    print("Schnipper successfully executed next " + str(cat) + " for " + str(subs))
-
-#gets next amount of posts after a user has used the get function
-@bot.command()
-async def next(ctx, num):
-    postsusing.clear
-    for x in range(int(num)):
-        postsusing.append(array.pop(0))
-        nextget()
-    
-#links to a post after using get or next or prev
-@bot.command()
-async def link(ctx, num):
-    n = -10
-    newlist = numarr[n:]
-    print(str(ctx.author) + " used link for " + str(newlist[int(num)-1].title))
-    try:
-        await ctx.send("https://www.reddit.com/" + newlist[int(num)-1].id)
-        print("Schnipper successfully executed link for " + str(newlist[int(num)-1].title))
-    except requests.Timeout as e:
-                print("Schnipper timed out")
-
-#sends body text of a post after using get or next or prev
-@bot.command()
-async def getpost(ctx, num):
-    n = -10
-    newlist = numarr[n:]
-    print(str(ctx.author) + " used getpost for " + str(newlist[int(num)-1].title))
-    text = newlist[int(num)-1].selftext
-    title = str(newlist[int(num)-1].title)
-    author = str(newlist[int(num)-1].author)
-    try:
-        if len(text) == 0:
-            await ctx.send("**" + title + "** posted by **" + author + "** has no body text.")
-            print("Post has no body text.")
-        else:
-            await ctx.send("**" + title + "** posted by **" + author + ":** ```" + text + "```")
-            print("Schnipper successfully executed getpost for " + str(newlist[int(num)-1].title))
+                print("Schnipper successfully executed getpost for " + str(newlist[int(num)-1].title))
     except requests.Timeout as e:
                 print("Schnipper timed out")
     except Exception as e:
@@ -378,3 +451,4 @@ async def help(ctx):
                 print("Schnipper timed out")
 
 bot.run(TOKEN)
+
