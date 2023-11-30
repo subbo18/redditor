@@ -1,4 +1,3 @@
-
 #creates command prefix, idk what the intents does
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='schnip ',intents=intents)
@@ -10,6 +9,8 @@ bot.remove_command('help')
 @bot.event
 async def on_ready():
     print(f'{bot.user} UP AND RUNNING')
+    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="schnip"))
+
 
 #schnip :3
 @bot.event
@@ -46,15 +47,12 @@ async def test(ctx, arg):
 '''
 
 '''
-shit that needs to be fixed rn:
+TODO:
     - add command that can toggle nsfw subreddits and confirm with user that they are over 18
     - add time and server to reports
     - handle post too long
     - make previous function
-    - make getpost still send any linked media even if post has no text
-    - WHY IS EVERYTHING SENDING TWICE? (PRIORITY)
-    - see if there is ANY faster way to get check if its gallery
-    - add "my command prefix is schnip" to help function
+    - make all the getting media stuff into a function then just call the function (PRIORITY)
 '''
 
 #to store total posts retrieved for a subreddit
@@ -75,6 +73,7 @@ async def get(ctx, sub, category, num):
     global cat
     global subs
     global lastusednum
+    global urlsarr
 
     lastusednum = int(num)
     cat = category
@@ -167,6 +166,7 @@ async def get(ctx, sub, category, num):
 #except it gets the next designated number of posts after user has used get
 @bot.command()
 async def getnext(ctx, num):
+    global urlsarr
     global array
     global cat
     global subs
@@ -285,6 +285,7 @@ async def link(ctx, num):
 #basically exact same as link function + get function
 @bot.command()
 async def getpost(ctx, num):
+    global urlsarr
     global lastusednum
     newlist = []
     n = len(array) - int(lastusednum)
@@ -297,16 +298,16 @@ async def getpost(ctx, num):
     title = str(newlist[int(num)-1].title)
     author = str(newlist[int(num)-1].author)
     try:
-        if len(text) == 0:
-            await ctx.send("**" + title + "** posted by **" + author + "** has no body text.")
-            print("Post has no body text.")
-        else:
             i = newlist[int(num)-1]
             if i.url.endswith(('.jpg', '.png', '.gif')):
-                try:
+                try: 
                     if int(num) > 0:
-                            await ctx.send("**" + title + "** posted by **" + author + ":** ```" + text + "```" +  i.url)
-                            num = int(num)-1
+                            if len(text) == 0:
+                                await ctx.send("**" + title + "** posted by **" + author + "** has no body text. " + i.url)
+                                print("Post has no body text.")
+                            else:
+                                await ctx.send("**" + title + "** posted by **" + author + ":** ```" + text + "```" +  i.url)
+                                num = int(num)-1
                 except Exception as e:
                     await ctx.send(f'Uh oh! Error: ' + e.args[0])
                     print(e.args[0])
@@ -316,8 +317,12 @@ async def getpost(ctx, num):
                 video_url = i.media['reddit_video']['fallback_url']
                 try:
                     if int(num) > 0:
-                        await ctx.send("**" + title + "** posted by **" + author + ":** ```" + text + "```" + video_url )
-                        num = int(num) -1
+                        if len(text) == 0:
+                                await ctx.send("**" + title + "** posted by **" + author + "** has no body text. " + video_url)
+                                print("Post has no body text.")
+                        else:
+                                await ctx.send("**" + title + "** posted by **" + author + ":** ```" + text + "```" + video_url )
+                                num = int(num) -1
                 except Exception as e:
                     await ctx.send(f'Uh oh! Error: ' + e.args[0])
                     print(e.args[0])
@@ -330,8 +335,12 @@ async def getpost(ctx, num):
                 galleryarr = " ".join(url_data)
                 try:
                     if int(num) > 0:
-                        await ctx.send("**" + title + "** posted by **" + author + ":** ```" + text + "```" +  f"{galleryarr}")
-                        num = int(num)-1
+                        if len(text) == 0:
+                                await ctx.send("**" + title + "** posted by **" + author + "** has no body text. " + f"{galleryarr}")
+                                print("Post has no body text.")
+                        else:
+                                await ctx.send("**" + title + "** posted by **" + author + ":** ```" + text + "```" +  f"{galleryarr}")
+                                num = int(num)-1
                 except Exception as e:
                     await ctx.send(f'Uh oh! Error: ' + e.args[0])
                     print(e.args[0])
@@ -345,9 +354,13 @@ async def getpost(ctx, num):
                         urlsarr.append(url)
                 try:
                     if int(num) > 0:
-                        await ctx.send("**" + str(x) + ". " + i.title + "** " + ' '.join(urlsarr))
-                        num = int(num)-1
-                        urlsarr = []
+                        if len(text) == 0:
+                                await ctx.send("**" + title + "** posted by **" + author + "** has no body text. " + ' '.join(urlsarr))
+                                print("Post has no body text.")
+                        else:
+                            await ctx.send("**" + title + "** posted by **" + author + ":** ```" + text + "```" + ' '.join(urlsarr))
+                            num = int(num)-1
+                            urlsarr = []
                 except Exception as e:
                     await ctx.send(f'Uh oh! Error: ' + e.args[0])
                     print(e.args[0])
@@ -371,10 +384,12 @@ async def commandlist(ctx):
     print(str(ctx.author) + " used commandlist")
     try:
         await ctx.channel.send(f'Here is a list of commands:')
-        await ctx.channel.send(f'**getten** - gets ten posts of a subreddit from a specific category. The format for using this command is "schnip getten *subreddit* *category*." For example, using "schnip getten terraria top" means you are looking for the top posts in r/terraria.')
-        await ctx.channel.send(f'**link** - gets link for a specific post, after you\'ve used a getten command. For example, after you\'ve got your top ten posts from r/terraria, using "schnip link 8" will give you the link for the 8th top post in r/terraria.')
-        await ctx.channel.send(f'**getpost** - gets the body text for a specific post, after you\'ve used a getten command. For example, after you\'ve got your top ten posts from r/terraria, using "schnip getpost 8" will give you body text the 8th top post in r/terraria.')
+        await ctx.channel.send(f'**get** - gets designated amount posts of a subreddit from a specific category. The format for using this command is "schnip get *subreddit* *category* *number_of_posts." For example, using "schnip get terraria top 10" will return the top 10 posts from r/terraria.')
+        await ctx.channel.send(f'**getnext** - gets the next few designated amount of posts.For example, after you\'ve got your top ten posts from r/terraria, using "schnip getnext 10" will return the next 10 top posts from r/terraria.')
+        await ctx.channel.send(f'**link** - gets link for a specific post. For example, after you\'ve got your top ten posts from r/terraria, using "schnip link 8" will give you the link for the 8th post in the list.')
+        await ctx.channel.send(f'**getpost** - gets the full post, including title, author, body text and any media. For example, after you\'ve got your top ten posts from r/terraria, using "schnip getpost 8" will give you the title, author, body text and media of the 8th top post in the list.')
         await ctx.channel.send(f'**help** - a guide to how Schnipper works.')
+        await ctx.channel.send(f'**learn** - a guide to Reddit.')
         print("Schnipper successfully executed commandlist")
     except requests.Timeout as err:
                 print("Schnipper timed out")
@@ -384,9 +399,16 @@ async def commandlist(ctx):
 async def help(ctx):
     print(str(ctx.author) + " used help")
     try:
-        await ctx.channel.send(f'Hello! My name is Schnipper, and I am a bot that browses Reddit! Use "schnip commandlist" to know my list of commands.')
-        await ctx.channel.send(f'If you aren\'t familiar Reddit or how it works, here is a quick guide:')
-        await ctx.channel.send(f'**Introduction:** ```"It is a social platform where users submit posts that other users \'upvote\' or \'downvote\' based on if they like it. If a post gets lots of upvotes it moves up the Reddit rankings so that more people can see it. If it gets downvotes it quickly falls and disappears from most people\'s view."```   - from Brandwatch')
+        await ctx.channel.send(f'Hello! My name is Schnipper, and I am a bot that browses Reddit!')
+        await ctx.channel.send(f'My command prefix is "schnip", AKA you have to put "schnip" at the start of any command. Use "schnip commandlist" to know my list of commands.')
+        await ctx.channel.send(f'If you aren\'t familiar Reddit or how it works, use the "learn" command to learn about Reddit.')
+    except Exception as e:
+        print("error")
+
+@bot.command()
+async def learn(ctx):
+    try:
+        await ctx.channel.send(f'**Introduction:** ```"Reddit is a social platform where users submit posts that other users \'upvote\' or \'downvote\' based on if they like it. If a post gets lots of upvotes it moves up the Reddit rankings so that more people can see it. If it gets downvotes it quickly falls and disappears from most people\'s view."```   - from Brandwatch')
         await ctx.channel.send(f'**Here is a great video that explains how Reddit works:** https://www.youtube.com/watch?v=c9wokyF6dLA&pp=ygUOV2hhdCBpcyByZWRkaXQ%3D')
         await ctx.channel.send(f'.')
         await ctx.channel.send(f'**Subreddits:** Subreddits or “subs” are communities here on Reddit that you can join and engage with. There are thousands of subreddits on here, communities for pretty much every topic you can think of. Every sub on here has a “rule book” of sorts and you must abide by all of the rules of a sub or you risk getting a ban. You can find sub rules in the “about” section of a sub, community info/the sidebar or sometimes pinned to the homepage of a sub and if you use the app when you make a post the rules are in the post feature.')
@@ -450,5 +472,6 @@ async def help(ctx):
     except requests.Timeout as err:
                 print("Schnipper timed out")
 
-bot.run(TOKEN)
+        
 
+bot.run(TOKEN)
