@@ -1,3 +1,4 @@
+
 #creates command prefix, idk what the intents does
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='schnip ',intents=intents)
@@ -52,7 +53,6 @@ TODO:
     - add time and server to reports
     - handle post too long
     - make previous function
-    - make all the getting media stuff into a function then just call the function (PRIORITY)
 '''
 
 #to store total posts retrieved for a subreddit
@@ -64,10 +64,65 @@ subs = ""
 
 #for link function
 lastusednum = 0
+async def media(ctx, num, array):
+    x = 0
+    urlsarr = []  # Initialize urlsarr as an empty list
+    for i in array:
+        x = x + 1
+        # gets reddit hosted image
+        if i.url.endswith(('.jpg', '.png', '.gif')):
+            try:
+                if int(num) > 0:
+                    await ctx.send("**" + str(x) + ". " + i.title + "** " + i.url)
+                    num = int(num) - 1
+            except Exception as e:
+                await ctx.send(f'Uh oh! Error: ' + str(e))
+                print(e)
 
-#lists ten posts of a category from a subreddit
+        # gets reddit hosted video
+        elif i.is_video:
+            video_url = i.media['reddit_video']['fallback_url']
+            try:
+                if int(num) > 0:
+                    await ctx.send("**" + str(x) + ". " + i.title + "** " + video_url)
+                    num = int(num) - 1
+            except Exception as e:
+                await ctx.send(f'Uh oh! Error: ' + str(e))
+                print(e)
+
+        # gets all images in a gallery
+        elif hasattr(i, "is_gallery"):
+            # idk how this part works but it does
+            ids = [j['media_id'] for j in i.gallery_data['items']]
+            url_data = [(i.media_metadata[id]['p'][0]['u'].split("?")[0].replace("preview", "i")) for id in ids]
+            galleryarr = " ".join(url_data)
+            try:
+                if int(num) > 0:
+                    await ctx.send(f"**{x}. {i.title}** {galleryarr}")
+                    num = int(num) - 1
+            except Exception as e:
+                await ctx.send(f'Uh oh! Error: ' + str(e))
+                print(e)
+
+        # gets all non-reddit hosted media and websites in post
+        else:
+            text = i.selftext
+            urls = extractor.find_urls(text)
+            for url in urls:
+                if url.startswith("https"):
+                    urlsarr.append(url)
+            try:
+                if int(num) > 0:
+                    await ctx.send("**" + str(x) + ". " + i.title + "** " + ' '.join(urlsarr))
+                    num = int(num) - 1
+                    urlsarr = []
+            except Exception as e:
+                await ctx.send(f'Uh oh! Error: ' + str(e))
+                print(e)
+
+
 @bot.command()
-#ctx refers to Commands.context object, idk what that does but it has to be there
+# ctx refers to Commands.context object, idk what that does but it has to be there
 async def get(ctx, sub, category, num):
     global array
     global cat
@@ -80,11 +135,8 @@ async def get(ctx, sub, category, num):
     subs = sub
 
     print(str(ctx.author) + " getted " + str(category) + " for " + str(sub))
-    
-    array = []
 
-    #array for all links in a post
-    urlsarr = []
+    array = []
 
     subreddit = reddit.subreddit(sub)
 
@@ -99,67 +151,13 @@ async def get(ctx, sub, category, num):
     elif category == "controversial":
         subbo = subreddit.controversial(limit=int(num))
     else:
-        await ctx.send("The only valid categories are: hot, new, top, rising or controversial.")
+        await ctx.send("The only valid categories are: hot, new, top, rising, or controversial.")
 
     for submission in subbo:
         array.append(submission)
 
-    x = 0
-    for i in array:
-        x = x+1
-        #gets reddit hosted image
-        if i.url.endswith(('.jpg', '.png', '.gif')):
-            try:
-                if int(num) > 0:
-                        await ctx.send("**" + str(x ) + ". " + i.title + "** " + i.url)
-                        num = int(num)-1
-            except Exception as e:
-                await ctx.send(f'Uh oh! Error: ' + e.args[0])
-                print(e.args[0])
+    await media(ctx, num, array)  # Call the media function with required arguments
 
-        #gets reddit hosted video
-        elif i.is_video:
-            video_url = i.media['reddit_video']['fallback_url']
-            try:
-                if int(num) > 0:
-                    await ctx.send("**" + str(x) + ". " + i.title + "** " + video_url )
-                    num = int(num) -1
-            except Exception as e:
-                await ctx.send(f'Uh oh! Error: ' + e.args[0])
-                print(e.args[0])
-
-        #gets all images in a gallery
-        elif hasattr(i, "is_gallery"):
-            #idk how this part works but it does
-            ids = [j['media_id'] for j in i.gallery_data['items']]
-            url_data = [(i.media_metadata[id]['p'][0]['u'].split("?")[0].replace("preview", "i")) for id in ids]
-            galleryarr = " ".join(url_data)
-            try:
-                if int(num) > 0:
-                    await ctx.send(f"**{x}. {i.title}** {galleryarr}")
-                    num = int(num)-1
-            except Exception as e:
-                await ctx.send(f'Uh oh! Error: ' + e.args[0])
-                print(e.args[0])
-
-        #gets all non reddit hosted media and websites in post
-        else:
-            text = i.selftext
-            urls = extractor.find_urls(text)
-            for url in urls:
-                if url.startswith("https"):
-                    urlsarr.append(url)
-            try:
-                if int(num) > 0:
-                    await ctx.send("**" + str(x) + ". " + i.title + "** " + ' '.join(urlsarr))
-                    num = int(num)-1
-                    urlsarr = []
-            except Exception as e:
-                await ctx.send(f'Uh oh! Error: ' + e.args[0])
-                print(e.args[0])
-
-        if x == int(num):
-                print("Schnipper successfully executed get " + str(category) + " for " + str(sub))
 
 
 #basically the same as get
@@ -205,63 +203,8 @@ async def getnext(ctx, num):
     #split it so it has only the new posts
     newarr = array[number:nummo]
 
-    x = 0
-    for i in newarr:
-        x += 1
-        
-        # gets reddit hosted image
-        if i.url.endswith(('.jpg', '.png', '.gif')):
-            try:
-                if int(num) > 0:
-                    await ctx.send(f"**{x}. {i.title}** {i.url}")
-                    num = int(num) - 1
-            except Exception as e:
-                await ctx.send(f'Uh oh! Error: {e}')
-                print(e)
+    await media(ctx, num, newarr)
 
-        # gets reddit hosted video
-        elif i.is_video:
-            video_url = i.media['reddit_video']['fallback_url']
-            try:
-                if int(num) > 0:
-                    await ctx.send(f"**{x}. {i.title}** {video_url}")
-                    num = int(num) - 1
-            except Exception as e:
-                await ctx.send(f'Uh oh! Error: {e}')
-                print(e)
-
-        # gets all images in a gallery
-        elif hasattr(i, "is_gallery"):
-            # idk how this part works but it does
-            ids = [j['media_id'] for j in i.gallery_data['items']]
-            url_data = [(i.media_metadata[id]['p'][0]['u'].split("?")[0].replace("preview", "i")) for id in ids]
-            galleryarr = " ".join(url_data)
-            try:
-                if int(num) > 0:
-                    await ctx.send(f"**{x}. {i.title}** {galleryarr}")
-                    num = int(num) - 1
-            except Exception as e:
-                await ctx.send(f'Uh oh! Error: {e}')
-                print(e)
-
-        # gets all non-reddit hosted media and websites in post
-        else:
-            text = i.selftext
-            urls = extractor.find_urls(text)
-            for url in urls:
-                if url.startswith("https"):
-                    urlsarr.append(url)
-            try:
-                if int(num) > 0:
-                    await ctx.send(f"**{x}. {i.title}** {' '.join(urlsarr)}")
-                    num = int(num) - 1
-                    urlsarr = []
-            except Exception as e:
-                await ctx.send(f'Uh oh! Error: {e}')
-                print(e)
-
-    if x == int(num):
-        print("Schnipper successfully executed get")
 
 #links to a post after using get or next or prev
 @bot.command()
