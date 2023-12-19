@@ -1,4 +1,3 @@
-
 #creates command prefix, idk what the intents does
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='schnip ',intents=intents)
@@ -39,20 +38,12 @@ async def on_message(message):
                 print(e.args[0])
     await bot.process_commands(message)
 
-#test command
-'''
-@bot.command()
-async def test(ctx, arg):
-    await ctx.send(arg)
-
-'''
-
 '''
 TODO:
-    - add command that can toggle nsfw subreddits and confirm with user that they are over 18
+    - finish adding check18 to gepost and link check 18
     - add time and server to reports
-    - handle post too long
-    - make previous function
+    - put in handle error codes: specifically command not found
+    - add recommended subreddits to browse
 '''
 
 #to store total posts retrieved for a subreddit
@@ -120,9 +111,21 @@ async def media(ctx, num, array):
                 await ctx.send(f'Uh oh! Error: ' + str(e))
                 print(e)
 
+NSFW = False
+
+async def check18(message):
+    global NSFW
+    await message.channel.send(f'Are you over 18?')
+    if message.author == bot.user: 
+        return
+    elif message.content == 'yes':
+        NSFW = True
+    else:
+        await message.channel.send(f'Sorry! You have to be 18 to view this subreddit/post.')
+    await bot.process_commands(message)
+
 
 @bot.command()
-# ctx refers to Commands.context object, idk what that does but it has to be there
 async def get(ctx, sub, category, num):
     global array
     global cat
@@ -152,11 +155,21 @@ async def get(ctx, sub, category, num):
         subbo = subreddit.controversial(limit=int(num))
     else:
         await ctx.send("The only valid categories are: hot, new, top, rising, or controversial.")
+        return
 
     for submission in subbo:
         array.append(submission)
 
-    await media(ctx, num, array)  # Call the media function with required arguments
+    is_nsfw_subreddit = subreddit.over18
+    is_nsfw_post = any(submission.over_18 for submission in array)
+
+    if is_nsfw_subreddit or is_nsfw_post:
+        if not NSFW:
+            await ctx.send("This subreddit is marked as NSFW. To view it, confirm you are over 18.")
+            if not await check18(ctx):
+                return
+
+    await media(ctx, num, array)
 
 
 
@@ -176,10 +189,10 @@ async def getnext(ctx, num):
 
     array = []
 
-    #gets up to previous length + new designated length
-    nummo = number+int(num)
+    # Gets up to previous length + new designated length
+    nummo = number + int(num)  # Retrieve the next ten posts
 
-    #array for all links in a post
+    # Array for all links in a post
     urlsarr = []
 
     subreddit = reddit.subreddit(subs)
@@ -196,12 +209,82 @@ async def getnext(ctx, num):
         subbo = subreddit.controversial(limit=int(nummo))
     else:
         await ctx.send("The only valid categories are: hot, new, top, rising, or controversial.")
+        return
 
     for submission in subbo:
         array.append(submission)
 
-    #split it so it has only the new posts
+    # Split it so it has only the new posts
     newarr = array[number:nummo]
+
+    is_nsfw_subreddit = subreddit.over18
+    is_nsfw_post = any(submission.over_18 for submission in array)
+
+    if is_nsfw_subreddit or is_nsfw_post:
+        if not NSFW:
+            await ctx.send("This subreddit is marked as NSFW. To view it, confirm you are over 18.")
+            if not await check18(ctx):
+                return
+
+    await media(ctx, num, newarr)
+
+
+@bot.command()
+async def getprev(ctx, num):
+    global urlsarr
+    global array
+    global cat
+    global subs
+    global lastusednum
+
+    number = len(array)
+
+    array = []
+
+    # Calculate the starting index for the previous posts
+    start_index = number - lastusednum - int(num)
+    if start_index < 0:
+        start_index = 0
+    
+    # Calculate the ending index for the previous posts
+    end_index = number - lastusednum
+
+    lastusednum = end_index
+
+
+    # Array for all links in a post
+    urlsarr = []
+
+    subreddit = reddit.subreddit(subs)
+
+    if cat == "hot":
+        subbo = subreddit.hot(limit=number)
+    elif cat == "new":
+        subbo = subreddit.new(limit=number)
+    elif cat == "top":
+        subbo = subreddit.top(limit=number)
+    elif cat == "rising":
+        subbo = subreddit.rising(limit=number)
+    elif cat == "controversial":
+        subbo = subreddit.controversial(limit=number)
+    else:
+        await ctx.send("The only valid categories are: hot, new, top, rising, or controversial.")
+        return
+
+    for submission in subbo:
+        array.append(submission)
+
+    # Adjust the range to include the previous posts
+    newarr = array[start_index:end_index]
+
+    is_nsfw_subreddit = subreddit.over18
+    is_nsfw_post = any(submission.over_18 for submission in array)
+
+    if is_nsfw_subreddit or is_nsfw_post:
+        if not NSFW:
+            await ctx.send("This subreddit is marked as NSFW. To view it, confirm you are over 18.")
+            if not await check18(ctx):
+                return
 
     await media(ctx, num, newarr)
 
@@ -224,102 +307,58 @@ async def link(ctx, num):
     except requests.Timeout as e:
         print("Schnipper timed out")
 
-#sends body text of a post after using get or next or prev
-#basically exact same as link function + get function
+@bot.event
+async def on_ready():
+    print(f'Logged in as {bot.user.name}')
+
+async def getpostfunc(ctx, num):
+    try:
+        post = array[int(num) - 1]
+        title = post.title
+        author = post.author.name
+        body = post.selftext
+        urlsarr = []
+
+        #removes the weird html shit
+        body = body.replace("&#x200B;", "")
+
+        await ctx.send(f"**Title:** {title}")
+        await ctx.send(f"**Author:** {author}")
+
+        # Check if the post has any affiliated links/hosted media
+        if post.url.endswith(('.jpg', '.png', '.gif')):
+            await ctx.send(f"**Media URL:** {post.url}")
+        elif post.is_video:
+            video_url = post.media['reddit_video']['fallback_url']
+            await ctx.send(f"**Video URL:** {video_url}")
+        elif hasattr(post, "is_gallery"):
+            ids = [j['media_id'] for j in post.gallery_data['items']]
+            url_data = [(post.media_metadata[id]['p'][0]['u'].split("?")[0].replace("preview", "i")) for id in ids]
+            galleryarr = " ".join(url_data)
+            await ctx.send(f"**Gallery URLs:** {galleryarr}")
+        else:
+            text = post.selftext
+            urls = extractor.find_urls(text)
+            for url in urls:
+                if url.startswith("https"):
+                    urlsarr.append(url)
+            if urlsarr:
+                await ctx.send(f"**Affiliated URLs:** {' '.join(urlsarr)}")
+
+        if len(body) > 0:
+            # Split the body text into chunks of 2000 characters each
+            body_chunks = textwrap.wrap(body, width=2000)
+            for chunk in body_chunks:
+                await ctx.send(chunk)
+
+
+
+    except IndexError:
+        await ctx.send("Invalid post number. Please choose a valid post number.")
+
 @bot.command()
 async def getpost(ctx, num):
-    global urlsarr
-    global lastusednum
-    newlist = []
-    n = len(array) - int(lastusednum)
-    if (len(array) > int(lastusednum)):
-        newlist = array[n:]
-    else:
-        newlist = array
-    print(str(ctx.author) + " used getpost for " + str(newlist[int(num)-1].title))
-    text = newlist[int(num)-1].selftext
-    title = str(newlist[int(num)-1].title)
-    author = str(newlist[int(num)-1].author)
-    try:
-            i = newlist[int(num)-1]
-            if i.url.endswith(('.jpg', '.png', '.gif')):
-                try: 
-                    if int(num) > 0:
-                            if len(text) == 0:
-                                await ctx.send("**" + title + "** posted by **" + author + "** has no body text. " + i.url)
-                                print("Post has no body text.")
-                            else:
-                                await ctx.send("**" + title + "** posted by **" + author + ":** ```" + text + "```" +  i.url)
-                                num = int(num)-1
-                except Exception as e:
-                    await ctx.send(f'Uh oh! Error: ' + e.args[0])
-                    print(e.args[0])
-
-            #gets reddit hosted video
-            elif i.is_video:
-                video_url = i.media['reddit_video']['fallback_url']
-                try:
-                    if int(num) > 0:
-                        if len(text) == 0:
-                                await ctx.send("**" + title + "** posted by **" + author + "** has no body text. " + video_url)
-                                print("Post has no body text.")
-                        else:
-                                await ctx.send("**" + title + "** posted by **" + author + ":** ```" + text + "```" + video_url )
-                                num = int(num) -1
-                except Exception as e:
-                    await ctx.send(f'Uh oh! Error: ' + e.args[0])
-                    print(e.args[0])
-
-            #gets all images in a gallery
-            elif hasattr(i, "is_gallery"):
-                #idk how this part works but it does
-                ids = [j['media_id'] for j in i.gallery_data['items']]
-                url_data = [(i.media_metadata[id]['p'][0]['u'].split("?")[0].replace("preview", "i")) for id in ids]
-                galleryarr = " ".join(url_data)
-                try:
-                    if int(num) > 0:
-                        if len(text) == 0:
-                                await ctx.send("**" + title + "** posted by **" + author + "** has no body text. " + f"{galleryarr}")
-                                print("Post has no body text.")
-                        else:
-                                await ctx.send("**" + title + "** posted by **" + author + ":** ```" + text + "```" +  f"{galleryarr}")
-                                num = int(num)-1
-                except Exception as e:
-                    await ctx.send(f'Uh oh! Error: ' + e.args[0])
-                    print(e.args[0])
-
-            #gets all non reddit hosted media and websites in post
-            else:
-                text = i.selftext
-                urls = extractor.find_urls(text)
-                for url in urls:
-                    if url.startswith("https"):
-                        urlsarr.append(url)
-                try:
-                    if int(num) > 0:
-                        if len(text) == 0:
-                                await ctx.send("**" + title + "** posted by **" + author + "** has no body text. " + ' '.join(urlsarr))
-                                print("Post has no body text.")
-                        else:
-                            await ctx.send("**" + title + "** posted by **" + author + ":** ```" + text + "```" + ' '.join(urlsarr))
-                            num = int(num)-1
-                            urlsarr = []
-                except Exception as e:
-                    await ctx.send(f'Uh oh! Error: ' + e.args[0])
-                    print(e.args[0])
-                print("Schnipper successfully executed getpost for " + str(newlist[int(num)-1].title))
-    except requests.Timeout as e:
-                print("Schnipper timed out")
-    except Exception as e:
-        errnum = e.args[0]
-        if e.code == 50006:
-             await ctx.send("Post has no body text.")
-             #need send media
-             print("Post has no body text, sending media instead. (" + errnum + ")")
-        elif e.code == 50035:
-             # need fix
-             await ctx.send("Post body text is too long to send on discord.")
-             print("Post body text is too long to send on discord. (" + errnum + ")")
+    await getpostfunc(ctx, num)
 
 #sends list of commands
 @bot.command()
