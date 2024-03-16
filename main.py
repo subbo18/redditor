@@ -1,49 +1,37 @@
+
+activity = discord.Activity(type=discord.ActivityType.watching, name="for red")
+
 #creates command prefix, idk what the intents does
 intents = discord.Intents.all()
-bot = commands.Bot(command_prefix='schnip ',intents=intents)
+bot = commands.Bot(command_prefix=['red ','Red '],intents=intents,activity=activity, status=discord.Status.online)
 
 #gets rid of default help command so i can make custom one
 bot.remove_command('help')
 
+
 #runs when bot successfully connects
 @bot.event
 async def on_ready():
-    print(f'{bot.user} UP AND RUNNING')
-    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="schnip"))
+    print(f'{bot.user.name}' + ' is UP AND RUNNING')
 
-
-#schnip :3
 @bot.event
 async def on_message(message):
     #makes sure bot doesnt respond to own mesages
     if message.author == bot.user: 
         return
-    #1/10 chance of responding with :3
-    probs = random.randint(1, 10)
-    if message.content == 'schnip':
-        print(str(message.author) + " said schnip")
-        if probs == 3:
-            try:
-                await message.channel.send(f':3')
-                print("Schnipper said :3")
-            except Exception as e:
-                await message.channel.send(f'Uh oh! Error: ' + e.args[0])
-                print(e.args[0])
-        else:
-            try:
-                await message.channel.send(f'schnip')
-                print("Schnipper said schnip")
-            except Exception as e:
-                await message.channel.send(f'Uh oh! Error: ' + e.args[0])
-                print(e.args[0])
+    if message.content == 'red' or message.content == 'Red':
+        print(str(message.author) + " said red")
+        await message.channel.send(f'Yep, that\'s me! Use "red help" to get started.')
     await bot.process_commands(message)
 
 '''
 TODO:
-    - finish adding check18 to gepost and link check 18
     - add time and server to reports
-    - put in handle error codes: specifically command not found
-    - add recommended subreddits to browse
+    - handle error codes: specifically command not found
+    - correctly format search system
+    - doesnt get reddit-uploaded video media
+    - also give a link function for search, like i can get the link to a community or user or to the post
+    - if a community has no posts, say it has no posts, same with if it got deleted or banned
 '''
 
 #to store total posts retrieved for a subreddit
@@ -111,18 +99,6 @@ async def media(ctx, num, array):
                 await ctx.send(f'Uh oh! Error: ' + str(e))
                 print(e)
 
-NSFW = False
-
-async def check18(message):
-    global NSFW
-    await message.channel.send(f'Are you over 18?')
-    if message.author == bot.user: 
-        return
-    elif message.content == 'yes':
-        NSFW = True
-    else:
-        await message.channel.send(f'Sorry! You have to be 18 to view this subreddit/post.')
-    await bot.process_commands(message)
 
 
 @bot.command()
@@ -164,10 +140,10 @@ async def get(ctx, sub, category, num):
     is_nsfw_post = any(submission.over_18 for submission in array)
 
     if is_nsfw_subreddit or is_nsfw_post:
-        if not NSFW:
-            await ctx.send("This subreddit is marked as NSFW. To view it, confirm you are over 18.")
-            if not await check18(ctx):
-                return
+        channel = ctx.channel
+        if not channel.is_nsfw():
+            await ctx.send("Sorry, you must be in a NSFW channel to access this content.")
+            return
 
     await media(ctx, num, array)
 
@@ -221,10 +197,11 @@ async def getnext(ctx, num):
     is_nsfw_post = any(submission.over_18 for submission in array)
 
     if is_nsfw_subreddit or is_nsfw_post:
-        if not NSFW:
-            await ctx.send("This subreddit is marked as NSFW. To view it, confirm you are over 18.")
-            if not await check18(ctx):
-                return
+        channel = ctx.channel
+        if not channel.is_nsfw():
+            await ctx.send("Sorry, you must be in a NSFW channel to access this content.")
+            return
+
 
     await media(ctx, num, newarr)
 
@@ -281,10 +258,11 @@ async def getprev(ctx, num):
     is_nsfw_post = any(submission.over_18 for submission in array)
 
     if is_nsfw_subreddit or is_nsfw_post:
-        if not NSFW:
-            await ctx.send("This subreddit is marked as NSFW. To view it, confirm you are over 18.")
-            if not await check18(ctx):
-                return
+        channel = ctx.channel
+        if not channel.is_nsfw():
+            await ctx.send("Sorry, you must be in a NSFW channel to access this content.")
+            return
+
 
     await media(ctx, num, newarr)
 
@@ -293,23 +271,33 @@ async def getprev(ctx, num):
 @bot.command()
 async def link(ctx, num):
     global lastusednum
-    #only has posts from the last function call
+    # Only has posts from the last function call
     newlist = []
     n = len(array) - int(lastusednum)
-    if (len(array) > int(lastusednum)):
+    if len(array) > int(lastusednum):
         newlist = array[n:]
     else:
         newlist = array
-    print(str(ctx.author) + " used link for " + str(newlist[int(num)-1].title))
-    try:
-        await ctx.send("https://www.reddit.com/" + newlist[int(num)-1].id)
-        print("Schnipper successfully executed link for " + str(newlist[int(num)-1].title))
-    except requests.Timeout as e:
-        print("Schnipper timed out")
 
-@bot.event
-async def on_ready():
-    print(f'Logged in as {bot.user.name}')
+    print(str(ctx.author) + " used link for " + str(newlist[int(num) - 1].title))
+
+    # Check if the subreddit or the post is marked as NSFW
+    is_nsfw_subreddit = newlist[int(num) - 1].subreddit.over18
+    is_nsfw_post = newlist[int(num) - 1].over_18
+
+    if is_nsfw_subreddit or is_nsfw_post:
+        channel = ctx.channel
+        if not channel.is_nsfw():
+            await ctx.send("Sorry, you must be in a NSFW channel to access this content.")
+            return
+
+
+    try:
+        await ctx.send("https://www.reddit.com/" + newlist[int(num) - 1].id)
+        print("Redditor successfully executed link for " + str(newlist[int(num) - 1].title))
+    except requests.Timeout as e:
+        print("Redditor timed out")
+
 
 async def getpostfunc(ctx, num):
     try:
@@ -319,7 +307,7 @@ async def getpostfunc(ctx, num):
         body = post.selftext
         urlsarr = []
 
-        #removes the weird html shit
+        # Removes the weird HTML characters
         body = body.replace("&#x200B;", "")
 
         await ctx.send(f"**Title:** {title}")
@@ -351,6 +339,32 @@ async def getpostfunc(ctx, num):
             for chunk in body_chunks:
                 await ctx.send(chunk)
 
+        # Check if the subreddit or the post is marked as NSFW
+        is_nsfw_subreddit = post.subreddit.over18
+        is_nsfw_post = post.over_18
+
+        if is_nsfw_subreddit or is_nsfw_post:
+            channel = ctx.channel
+        if not channel.is_nsfw():
+            await ctx.send("Sorry, you must be in a NSFW channel to access this content.")
+            return
+
+
+    except (IndexError, ValueError):
+        await ctx.send("Invalid post number. Please provide a valid post number.")
+
+async def check18(ctx):
+    def check(message):
+        return message.author == ctx.author and message.channel == ctx.channel and message.content.lower() == "yes"
+
+    try:
+        await ctx.send("Please confirm that you are over 18 by typing 'yes'.")
+        confirmation = await bot.wait_for("message", check=check, timeout=30)
+        return True
+    except asyncio.TimeoutError:
+        await ctx.send("Confirmation timed out. You must confirm that you are over 18 to view this content.")
+        return False
+
 
 
     except IndexError:
@@ -366,24 +380,63 @@ async def commandlist(ctx):
     print(str(ctx.author) + " used commandlist")
     try:
         await ctx.channel.send(f'Here is a list of commands:')
-        await ctx.channel.send(f'**get** - gets designated amount posts of a subreddit from a specific category. The format for using this command is "schnip get *subreddit* *category* *number_of_posts." For example, using "schnip get terraria top 10" will return the top 10 posts from r/terraria.')
-        await ctx.channel.send(f'**getnext** - gets the next few designated amount of posts.For example, after you\'ve got your top ten posts from r/terraria, using "schnip getnext 10" will return the next 10 top posts from r/terraria.')
-        await ctx.channel.send(f'**link** - gets link for a specific post. For example, after you\'ve got your top ten posts from r/terraria, using "schnip link 8" will give you the link for the 8th post in the list.')
-        await ctx.channel.send(f'**getpost** - gets the full post, including title, author, body text and any media. For example, after you\'ve got your top ten posts from r/terraria, using "schnip getpost 8" will give you the title, author, body text and media of the 8th top post in the list.')
-        await ctx.channel.send(f'**help** - a guide to how Schnipper works.')
+        await ctx.channel.send(f'**get** - gets designated amount posts of a subreddit from a specific category. The format for using this command is "red get *subreddit* *category* *number_of_posts.*" For example, using "red get terraria top 10" will return the top 10 posts from r/terraria.')
+        await ctx.channel.send(f'**getnext** - gets the next few designated amount of posts. For example, after you\'ve got your top ten posts from r/terraria, using "red getnext 10" will return the next 10 top posts from r/terraria.')
+        await ctx.channel.send(f'**getprev** - gets the previous few designated amount of posts. Does the opposite of getnext.')
+        await ctx.channel.send(f'**link** - gets link for a specific post. For example, after you\'ve got your top ten posts from r/terraria, using "red link 8" will give you the link for the 8th post in the list.')
+        await ctx.channel.send(f'**getpost** - gets the full post, including title, author, body text and any media. For example, after you\'ve got your top ten posts from r/terraria, using "red getpost 8" will give you the title, author, body text and media of the 8th post in the list.')
+        await ctx.channel.send(f'**help** - a guide to how I work.')
         await ctx.channel.send(f'**learn** - a guide to Reddit.')
-        print("Schnipper successfully executed commandlist")
+        print("Redditor successfully executed commandlist")
     except requests.Timeout as err:
-                print("Schnipper timed out")
+                print("Redditor timed out")
 
-#a guide to Schnipper
+@bot.command()
+async def search(ctx, search_type, query):
+    if search_type not in ["posts", "communities", "comments", "media", "people"]:
+        await ctx.send("Invalid search type. Please choose from: posts, communities, comments, media, or people.")
+        return
+
+    if search_type == "posts":
+        search_results = reddit.subreddit("all").search(query, limit=10)
+        result_message = "Search results for posts:\n"
+        for submission in search_results:
+            result_message += f"- {submission.title}\n"
+    elif search_type == "communities":
+        search_results = reddit.subreddits.search(query, limit=10)
+        result_message = "Search results for communities:\n"
+        for subreddit in search_results:
+            result_message += f"- {subreddit.display_name}\n"
+    elif search_type == "comments":
+        search_results = reddit.search_comments(query, limit=10)
+        result_message = "Search results for comments:\n"
+        for comment in search_results:
+            result_message += f"- {comment.body}\n"
+    elif search_type == "media":
+        search_results = reddit.subreddit("all").search(query, limit=10)
+        result_message = "Search results for media:\n"
+        for submission in search_results:
+            if submission.url:
+                result_message += f"- {submission.url}\n"
+    elif search_type == "people":
+        search_results = reddit.redditor(query)
+        result_message = f"Search results for people: {search_results.name}"
+    else:
+        await ctx.send("Invalid search type. Please choose from: posts, communities, comments, media, or people.")
+        return
+
+    await ctx.send(result_message)
+
+
+
+#a guide to Redditor
 @bot.command()
 async def help(ctx):
     print(str(ctx.author) + " used help")
     try:
-        await ctx.channel.send(f'Hello! My name is Schnipper, and I am a bot that browses Reddit!')
-        await ctx.channel.send(f'My command prefix is "schnip", AKA you have to put "schnip" at the start of any command. Use "schnip commandlist" to know my list of commands.')
-        await ctx.channel.send(f'If you aren\'t familiar Reddit or how it works, use the "learn" command to learn about Reddit.')
+        await ctx.channel.send(f'Hello! I am a bot that browses Reddit!')
+        await ctx.channel.send(f'My command prefix is "red", AKA you have to put "red" at the start of any command. Use "red commandlist" to see my list of commands.')
+        await ctx.channel.send(f'If you aren\'t familiar Reddit, use the "red learn" to learn about Reddit.')
     except Exception as e:
         print("error")
 
@@ -447,13 +500,14 @@ async def learn(ctx):
 
     **Throwaway account** - an alternate account that is not primarily used by the user.
 
-    **TIL** - “Today I Learned”```''')
+    **TIL** - “Today I Learned”''')
         await ctx.channel.send(f'.')
         await ctx.channel.send(f'''__**Here you can see the most popular communities of Reddit:**__ https://www.reddit.com/best/communities/1/''')
-        print("Schnipper successfully executed help")
+        print("Redditor successfully executed help")
     except requests.Timeout as err:
-                print("Schnipper timed out")
+                print("Redditor timed out")
 
         
+
 
 bot.run(TOKEN)
